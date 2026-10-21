@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.24"
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install
+        run: cd backend && uv sync --locked
+      - name: Validate
+        run: cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
+
+  integration:
+    name: integration
+    runs-on: ubuntu-24.04
+    env:
+      # Postgres is the same docker-compose.yml service a developer runs, so the image pin, the
+      # healthcheck and the test-database init script live in one place. These are the values
+      # Compose reads from .env locally; the password is a throwaway for a runner that lives
+      # minutes. The test database is <POSTGRES_DB>_test, created by docker/postgres/init.
+      POSTGRES_USER: taskmind
+      POSTGRES_PASSWORD: taskmind
+      POSTGRES_DB: taskmind
+      POSTGRES_PORT: "5432"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install
+        run: cd backend && uv sync --locked
+      - name: Start Postgres
+        run: docker compose up -d --wait db
+      - name: Integration tests with changed-line coverage
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:${{ env.POSTGRES_PORT }}/${{ env.POSTGRES_DB }}_test
+        run: cd backend && uv run pytest --cov=app --cov-report=xml && uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=20
