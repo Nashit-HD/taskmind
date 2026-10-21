@@ -31,25 +31,15 @@ jobs:
   integration:
     name: integration
     runs-on: ubuntu-24.04
-    services:
-      # The test database is created through POSTGRES_DB here, not by docker/postgres/init,
-      # because a GitHub service container cannot mount files from the checkout.
-      postgres:
-        image: postgres:17.9-alpine@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609
-        env:
-          POSTGRES_USER: taskmind
-          POSTGRES_PASSWORD: taskmind
-          POSTGRES_DB: taskmind_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U taskmind -d taskmind_test"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     env:
-      DATABASE_URL: postgresql+psycopg://taskmind:taskmind@localhost:5432/taskmind_test
-      TEST_DATABASE_URL: postgresql+psycopg://taskmind:taskmind@localhost:5432/taskmind_test
+      # Postgres is the same docker-compose.yml service a developer runs, so the image pin, the
+      # healthcheck and the test-database init script live in one place. These are the values
+      # Compose reads from .env locally; the password is a throwaway for a runner that lives
+      # minutes. The test database is <POSTGRES_DB>_test, created by docker/postgres/init.
+      POSTGRES_USER: taskmind
+      POSTGRES_PASSWORD: taskmind
+      POSTGRES_DB: taskmind
+      POSTGRES_PORT: "5432"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -61,5 +51,9 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install
         run: cd backend && uv sync --locked
+      - name: Start Postgres
+        run: docker compose up -d --wait db
       - name: Integration tests with changed-line coverage
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:${{ env.POSTGRES_PORT }}/${{ env.POSTGRES_DB }}_test
         run: cd backend && uv run pytest --cov=app --cov-report=xml && uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=20
