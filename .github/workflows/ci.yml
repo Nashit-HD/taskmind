@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.24"
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install
+        run: cd backend && uv sync --locked
+      - name: Validate
+        run: cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
+
+  integration:
+    name: integration
+    runs-on: ubuntu-24.04
+    services:
+      # The test database is created through POSTGRES_DB here, not by docker/postgres/init,
+      # because a GitHub service container cannot mount files from the checkout.
+      postgres:
+        image: postgres:17.9-alpine@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609
+        env:
+          POSTGRES_USER: taskmind
+          POSTGRES_PASSWORD: taskmind
+          POSTGRES_DB: taskmind_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskmind -d taskmind_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://taskmind:taskmind@localhost:5432/taskmind_test
+      TEST_DATABASE_URL: postgresql+psycopg://taskmind:taskmind@localhost:5432/taskmind_test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install
+        run: cd backend && uv sync --locked
+      - name: Integration tests with changed-line coverage
+        run: cd backend && uv run pytest --cov=app --cov-report=xml && uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=20
