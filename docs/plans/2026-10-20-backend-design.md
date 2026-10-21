@@ -1,6 +1,8 @@
 # TaskMind backend — design
 
-**Date:** 2026-10-20, revised 2026-10-21 · **Status:** approved (revision pending approval) · **Scope:** backend and database
+**Date:** 2026-10-20, revised 2026-10-21 · **Status:** approved · **Scope:** backend and database
+
+Related decisions: `docs/adr/`. Terms: `GLOSSARY.md` (a note's **author**, a chat's **user**, the **assistant**).
 
 ## Intent
 
@@ -18,8 +20,9 @@ After discussion with Hitesh the scope grew from the original assignment documen
 
 1. Users sign in. Every signed-in user can see all notes and create notes. Only a note's author can
    edit or delete it.
-2. Every chat belongs to a note. Anyone signed in can open a chat on any note.
-3. When a user posts a message in a chat, an AI assistant replies, using only the note's content.
+2. Every chat belongs to one note and to the one user who opened it. Anyone signed in can open a
+   chat on any note, and nobody else can see that chat (ADR 0003).
+3. When the user posts a message in their chat, the assistant replies, using only the note's content.
 
 The original assignment's standalone `/chats` endpoints are replaced by note-scoped ones.
 
@@ -37,7 +40,7 @@ The original assignment's standalone `/chats` endpoints are replaced by note-sco
 | Layers | Routers call the session directly; one `assistant` module wraps the OpenAI call | Routers, schemas, models and session setup as the assignment asks. The assistant is the one piece with an outbound dependency, so it gets its own module and is injected as a dependency so tests can replace it |
 | Authentication | Email + password; Argon2id via `pwdlib`; JWT (HS256, `pyjwt`) sent as `Authorization: Bearer` | HD's password-hashing decision. Bearer tokens need no CSRF handling for the Next.js client |
 | Token lifetime | 60 minutes, no refresh token | A product decision for a practice app. The server enforces `exp` |
-| Authorisation | Every `/notes` and `/chats` route requires a signed-in user. Note edit and delete, and chat rename and delete, are creator-only (403 otherwise). Reading notes and chats, and posting messages, is open to any signed-in user | Checked against the actor from the token, never an id in the request |
+| Authorisation | Every `/notes` and `/chats` route requires a signed-in user. Notes: anyone signed in reads and creates; edit and delete are author-only (403 otherwise). Chats: anyone signed in opens a chat on any note; listing, reading, renaming, deleting and posting to a chat are for its user only (403 otherwise) | Checked against the actor from the token, never an id in the request. Private chats per ADR 0003 |
 | List bounds | `limit` (default 50, max 100) and `offset` on every list endpoint | Result sets must be bounded. Also covers the pagination bonus |
 | Health | `GET /health` runs `SELECT 1`; 200 or 503 | Reports the database, not just liveness. Compose uses it as the backend healthcheck |
 | Error shape | FastAPI's default `{"detail": ...}` | One shape everywhere. 422 bodies keep FastAPI's list under `detail` |
@@ -54,7 +57,7 @@ The original assignment's standalone `/chats` endpoints are replaced by note-sco
 |---|---|---|
 | `users` | `id` int PK; `email` varchar(254) not null, unique, stored lower-cased; `password_hash` text not null; `created_at` timestamptz not null | |
 | `notes` | `id` int PK; `author_id` int FK → `users.id` not null; `title` varchar(200) not null; `content` text not null default `''`; `created_at`, `updated_at` timestamptz not null | Index on `created_at` for "newest first" |
-| `chats` | `id` int PK; `note_id` int FK → `notes.id` on delete cascade, not null; `created_by` int FK → `users.id` not null; `title` varchar(100) not null; `created_at`, `updated_at` timestamptz not null | Index on `(note_id, updated_at)` for "most recently updated first" within a note |
+| `chats` | `id` int PK; `note_id` int FK → `notes.id` on delete cascade, not null; `user_id` int FK → `users.id` not null, the user the chat belongs to; `title` varchar(100) not null; `created_at`, `updated_at` timestamptz not null | Index on `(note_id, user_id, updated_at)` for "this user's chats on this note, most recently updated first" |
 | `messages` | `id` int PK; `chat_id` int FK → `chats.id` on delete cascade, not null; `role` varchar(16) not null, one of `user`, `assistant`; `content` text not null; `created_at` timestamptz not null | Index on `(chat_id, created_at)` for "oldest first" within a chat |
 
 `created_at` and `updated_at` are set by the database (`server_default=now()`), and `updated_at`
@@ -72,7 +75,7 @@ Request and response schemas are separate classes.
 |---|---|---|
 | Auth | `UserRegister(email, password)`, `UserLogin(email, password)` | `UserRead(id, email, created_at)`; `Token(access_token, token_type="bearer")` |
 | Note | `NoteCreate(title, content="")`, `NoteUpdate(title, content)` | `NoteRead(id, author_id, title, content, created_at, updated_at)` |
-| Chat | `ChatCreate(title)`, `ChatUpdate(title)` | `ChatRead(id, note_id, created_by, title, created_at, updated_at)`; `ChatDetail = ChatRead + messages: list[MessageRead]` |
+| Chat | `ChatCreate(title)`, `ChatUpdate(title)` | `ChatRead(id, note_id, user_id, title, created_at, updated_at)`; `ChatDetail = ChatRead + messages: list[MessageRead]` |
 | Message | `MessageCreate(content)` | `MessageRead(id, chat_id, role, content, created_at)`; `MessageExchange(user_message: MessageRead, assistant_message: MessageRead)` |
 
 Titles and message content are stripped of surrounding whitespace and must be non-empty after
@@ -96,12 +99,12 @@ invalid token returns 401 with `WWW-Authenticate: Bearer`.
 | GET | `/notes/{id}` | 200 `NoteRead` / 404 | |
 | PUT | `/notes/{id}` | 200 `NoteRead` / 403 / 404 | author only |
 | DELETE | `/notes/{id}` | 204 / 403 / 404 | author only; cascades to chats and messages |
-| GET | `/notes/{id}/chats?limit=&offset=` | 200 `list[ChatRead]` / 404 | most recently updated first |
-| POST | `/notes/{id}/chats` | 201 `ChatRead` / 404 | creator is the caller |
-| GET | `/chats/{id}` | 200 `ChatDetail` / 404 | messages oldest first, one query |
-| PUT | `/chats/{id}` | 200 `ChatRead` / 403 / 404 | rename, creator only |
-| DELETE | `/chats/{id}` | 204 / 403 / 404 | creator only; cascades to messages |
-| POST | `/chats/{id}/messages` | 201 `MessageExchange` / 404 / 502 | stores the user message, gets the assistant reply, stores it, bumps chat `updated_at`, all in one transaction |
+| GET | `/notes/{id}/chats?limit=&offset=` | 200 `list[ChatRead]` / 404 | the caller's chats on the note, most recently updated first |
+| POST | `/notes/{id}/chats` | 201 `ChatRead` / 404 | the chat belongs to the caller |
+| GET | `/chats/{id}` | 200 `ChatDetail` / 403 / 404 | the chat's user only; messages oldest first, one query |
+| PUT | `/chats/{id}` | 200 `ChatRead` / 403 / 404 | rename, the chat's user only |
+| DELETE | `/chats/{id}` | 204 / 403 / 404 | the chat's user only; cascades to messages |
+| POST | `/chats/{id}/messages` | 201 `MessageExchange` / 403 / 404 / 502 | the chat's user only; stores the user message, gets the assistant reply, stores it, bumps chat `updated_at`, all in one transaction |
 
 Invalid bodies, non-integer ids and out-of-range `limit`/`offset` return 422. CORS allows
 `http://localhost:3000`, read from settings.
@@ -165,7 +168,7 @@ cached layer before copying source, runs as a non-root user, and has a `.dockeri
 |---|---|
 | Existing patterns | Greenfield. The conventions above are chosen once and recorded in `AGENTS.md` |
 | Trust boundary | Request bodies, path ids, `limit`/`offset`, the bearer token. Bodies and params validated by Pydantic and FastAPI typing. The token is verified (signature with the expected algorithm, `exp`) before any data access. `/auth/register` and `/auth/login` are the only unauthenticated data routes, plus `/health` |
-| Authorisation | Router-level `get_current_user` on `/notes`, `/chats` and `/auth/me`. Creator-only checks compare the row's `author_id`/`created_by` with the actor's id from the token. Default is deny: no token, bad token, expired token → 401; wrong user → 403 |
+| Authorisation | Router-level `get_current_user` on `/notes`, `/chats` and `/auth/me`. Ownership checks compare the row's `author_id` (notes) or `user_id` (chats) with the actor's id from the token; chat lists are filtered by the actor's id in the query. Default is deny: no token, bad token, expired token → 401; wrong user → 403 |
 | Stored data | Users (email and password hash), notes, chats, messages. Email is personal data: it is needed to sign in, stays in the one table, and never appears in logs or in another user's responses (`NoteRead` carries `author_id`, not the email) |
 | Credentials and secrets | Argon2id with library defaults. `JWT_SECRET` and `OPENAI_API_KEY` from the environment only. Login returns the same 401 for unknown email and wrong password. Error responses carry no stack traces, query text or tokens |
 | Data volume | Tiny. Lists bounded by `limit`; ordered queries indexed; chat detail loads messages in one query; the assistant gets at most the last 20 messages and the one note |
@@ -183,7 +186,8 @@ cached layer before copying source, runs as a non-root user, and has a `.dockeri
 - Login with unknown email or wrong password → 401, identical body.
 - Expired or tampered token → 401. Token signed with a different algorithm → 401.
 - Non-integer id in the path → 422. Unknown integer id → 404.
-- Editing or deleting another user's note or chat → 403, nothing changed.
+- Editing or deleting another user's note → 403, nothing changed.
+- Listing never shows another user's chats; reading, renaming, deleting or posting to one → 403, nothing changed.
 - `limit` of 0 or over 100, negative `offset` → 422.
 - Chat opened on a missing note, message posted to a missing chat → 404, nothing written.
 - Deleting an already-deleted item → 404.
@@ -202,10 +206,11 @@ cached layer before copying source, runs as a non-root user, and has a `.dockeri
   password 401; `/auth/me` with and without a token.
 - `tests/integration/test_notes.py`: create 201 with `author_id`; list newest first, bounded, shows
   other users' notes; get; update and delete by the author; 403 for another user; 404s; 422s.
-- `tests/integration/test_chats.py`: create a chat on a note; list by `updated_at` desc; rename and
-  delete by creator, 403 for another user; get returns messages oldest first; post message stores
-  both messages with the fake assistant's reply and bumps `updated_at`; assistant failure gives 502
-  and stores nothing; 404 for a missing chat or note; deleting a note removes its chats.
+- `tests/integration/test_chats.py`: create a chat on a note; list shows only the caller's chats,
+  by `updated_at` desc; rename and delete by the chat's user; get, rename, delete and post return
+  403 for another user; get returns messages oldest first; post message stores both messages with
+  the fake assistant's reply and bumps `updated_at`; assistant failure gives 502 and stores nothing;
+  404 for a missing chat or note; deleting a note removes its chats.
 - `tests/integration/test_health.py`: 200 when the database answers.
 
 Fixtures: session-scoped engine on `TEST_DATABASE_URL` that runs `alembic upgrade head`;
@@ -240,7 +245,7 @@ frontend; Hitesh should know that.
 ## Documentation Notes
 
 - Greenfield conventions (layout, naming, error shape, logging fields, dependency aliases) → **AGENTS.md** Architecture & Structure, new: nothing exists yet.
-- Who may do what (signed-in for everything, creator-only for edit/delete/rename) → **AGENTS.md** Quirks & Gotchas, and **README** Decisions.
+- Who may do what (signed-in for everything; notes edited by their author; chats visible only to their user) → **AGENTS.md** Quirks & Gotchas, and **README** Decisions.
 - `taskmind_test` created by the Postgres init script, which only runs on a fresh volume → **AGENTS.md** Quirks & Gotchas.
 - Message post is one transaction around the assistant call → **code** `app/routers/chats.py` docstring.
 - The assistant is a dependency so tests replace it; never call OpenAI directly from a router → **AGENTS.md** Architecture & Structure.

@@ -839,6 +839,11 @@ EOF
 
 - [ ] **Step 1: AGENTS.md**
 
+`AGENTS.md` already exists with the team's agent guide (issue tracker, triage labels, domain docs).
+Per the instruction-file policy, that content is team notes: keep it word for word below the END
+marker, under `# Project Notes (team-maintained)`, and write the required section above it. The
+file becomes the block below, followed by the divider, followed by the existing content unchanged.
+
 ```markdown
 # AGENTS.md
 <!-- hd-skills REQUIRED SECTION: maintain-project-docs manages everything above the END marker -->
@@ -904,11 +909,14 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - ⚠️ **Port 5432 may be taken by another project's Postgres** — set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 - ⚠️ **`get_settings()` is cached** — a test that changes env must call `get_settings.cache_clear()` after.
 - ⚠️ **No AI attribution in commits or PR descriptions** — remove any `Co-Authored-By: Claude` or "Generated with" line before committing.
+- ⚠️ **Read `GLOSSARY.md` and `docs/adr/` before changing the domain** — chats are private to their user (ADR 0003); use author, user, assistant, not owner, creator, bot.
 <!-- END hd-skills REQUIRED SECTION: everything below is team-maintained; tooling never edits it -->
 
 ---
 
 # Project Notes (team-maintained)
+
+<the existing AGENTS.md content, unchanged, starting at its "## Agent skills" heading>
 ```
 
 - [ ] **Step 2: CLAUDE.md**
@@ -994,7 +1002,8 @@ See `docs/plans/2026-10-20-backend-design.md`. In short:
 - SQLAlchemy 2.0 (sync) with psycopg 3; separate Pydantic request and response schemas.
 - Email + password sign-in with Argon2id hashing and short-lived JWT bearer tokens.
 - Every signed-in user can read every note; only the author edits or deletes it.
-- Chats belong to a note; the assistant answers from that note's content only.
+- Chats belong to a note and are private to the user who opened them; the assistant answers from
+  that note's content only (see `docs/adr/`).
 - JSON logs with an `X-Request-Id` on every request and response.
 
 ## Unfinished and next steps
