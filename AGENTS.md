@@ -58,7 +58,7 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - CI (`.github/workflows/ci.yml`) runs the Validate command and the integration suite on every pull request to `main`
 ## Quirks & Gotchas
 - ⚠️ **The test database is `<POSTGRES_DB>_test`, created by `docker/postgres/init/` only on a fresh volume** — if it is missing, `docker compose down -v` then `up -d db`.
-- ⚠️ **Tests read only `TEST_DATABASE_URL` and refuse a database whose name does not end in `_test`** — set it in `.env` or the environment; the test process overrides `DATABASE_URL` with it.
+- ⚠️ **Integration tests read only `TEST_DATABASE_URL` and refuse a database whose name does not end in `_test`** — set it in `.env` or the environment; unit tests need no database; the test process overrides `DATABASE_URL`.
 - ⚠️ **Compose refuses to start without `POSTGRES_PASSWORD`** — `cp .env.example .env` first; `.env` is gitignored.
 - ⚠️ **Port 5432 may be taken by another project's Postgres** — set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 - ⚠️ **`get_settings()` is cached** — a test that changes env must call `get_settings.cache_clear()` after.
