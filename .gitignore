@@ -32,3 +32,7 @@ npm-debug.log*
 .vscode/
 .idea/
 .DS_Store
+
+# Agent skills installed locally with the skills CLI; not part of the project
+.claude/skills/
+skills-lock.json
