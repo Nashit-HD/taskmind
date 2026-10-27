@@ -13,6 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
 from app.logging import REQUEST_ID_HEADER, configure_logging, request_logging_middleware
+from app.routers import auth
 
 logger = logging.getLogger("taskmind.database")
 
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     application.middleware("http")(request_logging_middleware)
+    application.include_router(auth.router)
     application.add_exception_handler(OperationalError, database_unavailable)
     return application
 
