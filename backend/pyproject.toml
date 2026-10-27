@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.16.1",
     "sqlalchemy>=2.1.5",
     "psycopg[binary]>=3.3.6",
+    "alembic>=1.20.0",
 ]
 
 [dependency-groups]
@@ -33,10 +34,15 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 
+[tool.ruff.lint.isort]
+# The migrations directory is also called "alembic", so Ruff would otherwise sort the
+# alembic package as first-party.
+known-third-party = ["alembic"]
+
 [tool.mypy]
 strict = true
 python_version = "3.13"
-files = ["app", "tests"]
+files = ["app", "alembic", "tests"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
