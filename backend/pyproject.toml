@@ -42,7 +42,7 @@ known-third-party = ["alembic"]
 [tool.mypy]
 strict = true
 python_version = "3.13"
-files = ["app", "tests"]
+files = ["app", "alembic", "tests"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
