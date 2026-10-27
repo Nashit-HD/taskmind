@@ -38,6 +38,20 @@ uv run fastapi dev
 
 The API is at http://localhost:8000 and the OpenAPI docs at http://localhost:8000/docs.
 
+### Signing in
+
+Set `JWT_SECRET` in `.env` first; the app refuses the placeholder. Then:
+
+```bash
+curl -s -X POST localhost:8000/auth/register -H 'Content-Type: application/json' \
+  -d '{"email": "ada@example.com", "password": "correct horse battery"}'
+curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
+  -d '{"email": "ada@example.com", "password": "correct horse battery"}'
+curl -s localhost:8000/auth/me -H "Authorization: Bearer <access_token>"
+```
+
+Tokens last `JWT_EXPIRE_MINUTES` (default 60). On `/docs`, the Authorize button takes the token.
+
 ### Changing the schema
 
 Edit the models under `backend/app/models/`, then:
@@ -73,7 +87,8 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 See `docs/plans/2026-10-20-backend-design.md` and `docs/adr/`. In short:
 
 - SQLAlchemy 2.0 (sync) with psycopg 3; separate Pydantic request and response schemas.
-- Email + password sign-in with Argon2id hashing and short-lived JWT bearer tokens.
+- Email + password sign-in with Argon2id hashing and short-lived JWT bearer tokens, behind one
+  `get_current_user` dependency (ADR 0002).
 - Every signed-in user can read every note; only the author edits or deletes it.
 - Chats belong to a note and are private to the user who opened them; the assistant answers from
   that note's content only.
