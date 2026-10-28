@@ -8,6 +8,9 @@ The unit suite needs no database. The application's ``Settings`` still require `
 import, so the test process sets it to ``TEST_DATABASE_URL`` when that is configured, and otherwise
 to a sentinel that can never connect. Either way, code under test cannot reach a development
 database. The integration suite's ``conftest.py`` is what refuses to run without the real value.
+
+The JWT secret is likewise set here for the test process, so a developer's real secret is never
+used by a test.
 """
 
 import os
@@ -47,3 +50,9 @@ def _load_test_database_url() -> str | None:
 TEST_DATABASE_URL = _load_test_database_url()
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL or _NO_DATABASE_URL
+
+# A throwaway secret for the test process only, so tests need no real secret and never use one.
+TEST_JWT_SECRET = "test-only-secret-never-used-anywhere-real-0123456789"
+
+os.environ["JWT_SECRET"] = TEST_JWT_SECRET
+os.environ.setdefault("JWT_EXPIRE_MINUTES", "60")

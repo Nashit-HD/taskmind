@@ -14,9 +14,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
+from app.database import get_db
+from app.main import app
 from tests.conftest import TEST_DATABASE_URL
 
 if TEST_DATABASE_URL is None:
@@ -77,3 +80,12 @@ def db_session(migrated_engine: Engine) -> Iterator[Session]:
         ) as session:
             yield session
         transaction.rollback()
+
+
+@pytest.fixture
+def client(db_session: Session) -> Iterator[TestClient]:
+    """The app with ``get_db`` replaced by the rolled-back session, so a request's writes vanish."""
+    app.dependency_overrides[get_db] = lambda: db_session
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()

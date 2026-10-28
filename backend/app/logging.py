@@ -6,6 +6,9 @@ them into the message.
 
 The request id is taken from the ``X-Request-Id`` header when the caller sends one, or generated,
 and is returned on the response so a client can quote it.
+
+When the request was authenticated, the line also carries ``user_id``, set on ``request.state``
+by ``app.auth.get_current_user``.
 """
 
 import json
@@ -97,6 +100,7 @@ async def request_logging_middleware(
                     "path": request.url.path,
                     "status": response.status_code,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "user_id": getattr(request.state, "user_id", None),
                 }
             },
         )

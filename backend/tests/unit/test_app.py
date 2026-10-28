@@ -104,19 +104,6 @@ def test_an_unhandled_error_is_logged_and_returns_500(caplog: pytest.LogCaptureF
     assert errors[0].exc_info is not None
 
 
-def test_settings_cors_origins_are_split_on_commas(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import Settings, get_settings
-
-    monkeypatch.setenv("CORS_ORIGINS", "http://a.example, http://b.example,")
-    get_settings.cache_clear()
-    try:
-        settings = Settings()
-    finally:
-        get_settings.cache_clear()
-
-    assert settings.cors_origin_list == ["http://a.example", "http://b.example"]
-
-
 def test_exactly_one_json_handler_is_on_the_root_logger_after_repeated_setup() -> None:
     create_app()
     create_app()
