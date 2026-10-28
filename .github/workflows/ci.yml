@@ -1,8 +1,7 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
+  pull_request:            # every pull request, whatever its base: a stacked PR must run CI too
   push:
     branches: [main]
 

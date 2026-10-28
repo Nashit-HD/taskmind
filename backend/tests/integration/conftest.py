@@ -9,6 +9,7 @@ suite's own engine, so a developer's ``DATABASE_URL`` is never migrated by a tes
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -89,3 +90,38 @@ def client(db_session: Session) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+PASSWORD = "correct horse battery"
+
+
+@dataclass(frozen=True)
+class SignedInUser:
+    """A registered user and the ``Authorization`` header a request sends to act as them."""
+
+    id: int
+    email: str
+    headers: dict[str, str]
+
+
+def sign_in(client: TestClient, email: str) -> SignedInUser:
+    """Register ``email`` through the API and log in, so the token is one the app issued."""
+    registered = client.post("/auth/register", json={"email": email, "password": PASSWORD})
+    assert registered.status_code == 201, registered.text
+    login = client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    token = login.json()["access_token"]
+    return SignedInUser(
+        id=registered.json()["id"], email=email, headers={"Authorization": f"Bearer {token}"}
+    )
+
+
+@pytest.fixture
+def user(client: TestClient) -> SignedInUser:
+    return sign_in(client, "ada@example.com")
+
+
+@pytest.fixture
+def second_user(client: TestClient) -> SignedInUser:
+    """Another signed-in user, for the cases where the caller is not the author."""
+    return sign_in(client, "grace@example.com")
