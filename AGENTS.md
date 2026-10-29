@@ -41,7 +41,7 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - `backend/app/main.py` — `create_app()`; the module-level `app` is served by `fastapi dev`/`fastapi run` via `[tool.fastapi]` in `pyproject.toml`
 - `backend/app/config.py` — `Settings` from env, then the repo-root `.env`; `SettingsDep` for handlers
 - `backend/app/logging.py` — JSON formatter, `X-Request-Id` middleware, one log line per request; pass fields as `extra={"fields": {...}}`
-- `backend/app/assistant.py` — the `Assistant` protocol, `get_assistant` and `AssistantDep`; routers never call a provider directly, tests override the dependency, PR 7 swaps the `EchoAssistant` default for OpenAI
+- `backend/app/assistant.py` — the `Assistant` protocol, `get_assistant` and `AssistantDep`; routers never call a provider directly. `build_assistant()` picks `OpenAIAssistant` when `OPENAI_API_KEY` is set, else `EchoAssistant`, once per process (cached); tests override the dependency or clear the cache
 - `backend/app/pagination.py` — `LimitQuery`/`OffsetQuery`, the bounds every list endpoint shares
 - `backend/app/routers/health.py` — `GET /health`, unauthenticated, 200 only when `SELECT 1` answers; the Compose healthcheck calls it
 - `backend/Dockerfile` + `backend/entrypoint.sh` — pinned `python:3.13-slim`, deps from `uv.lock` with `--no-dev`, non-root; the entrypoint runs `alembic upgrade head` then `fastapi run`
@@ -66,6 +66,7 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - ⚠️ **Compose refuses to start without `POSTGRES_PASSWORD` and `JWT_SECRET`, even for `db` alone** — `cp .env.example .env` and set a real `JWT_SECRET`; `.env` is gitignored.
 - ⚠️ **Port 5432 may be taken by another project's Postgres** — set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 - ⚠️ **`get_settings()` is cached** — a test that changes env must call `get_settings.cache_clear()` after.
+- ⚠️ **`build_assistant()` is cached like `get_settings()`** — a test that sets `OPENAI_API_KEY` must clear both caches; `tests/conftest.py` unsets the key so no test ever calls OpenAI.
 - ⚠️ **No AI attribution in commits or PR descriptions** — remove any `Co-Authored-By: Claude` or "Generated with" line before committing.
 - ⚠️ **Read `GLOSSARY.md` and `docs/adr/` before changing the domain** — chats are private to their user (ADR 0003); use author, user, assistant, not owner, creator, bot.
 <!-- END hd-skills REQUIRED SECTION: everything below is team-maintained; tooling never edits it -->

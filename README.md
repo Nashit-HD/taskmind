@@ -85,8 +85,8 @@ curl -s -X DELETE localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN" -o /d
 ### Chats
 
 A chat belongs to one note and is private to the user who opened it. Posting a message stores it,
-asks the assistant, and stores the reply. Until PR 7 the assistant is an echo, so the flow can be
-tried without an API key.
+asks the assistant, and stores the reply. Without an `OPENAI_API_KEY` the assistant is an echo, so the
+flow can be tried without a key.
 
 ```bash
 curl -s -X POST localhost:8000/notes/1/chats -H "Authorization: Bearer $TOKEN" \
@@ -103,6 +103,15 @@ curl -s -X DELETE localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN" -o /d
 A chat detail carries its most recent 200 messages, oldest first. Messages are at most 4000
 characters. Another user's chat is a 403; if the assistant fails the reply is a 502 and nothing
 is stored.
+
+### The assistant
+
+Set `OPENAI_API_KEY` in `.env` and the assistant answers through OpenAI, using only the note the
+chat belongs to; `OPENAI_MODEL` picks the model. Leave the key empty and an echo answers instead,
+so everything else can be tried without a key; the log says so once at the first message.
+
+Each call has a 30-second timeout and at most two retries on transient errors. If it still fails,
+the message post is a 502 and nothing is stored, so re-send it.
 
 ### Changing the schema
 
