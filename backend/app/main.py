@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
 from app.logging import REQUEST_ID_HEADER, configure_logging, request_logging_middleware
-from app.routers import auth, chats, notes
+from app.routers import auth, chats, health, notes
 
 logger = logging.getLogger("taskmind.database")
 
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     application.middleware("http")(request_logging_middleware)
+    application.include_router(health.router)
     application.include_router(auth.router)
     application.include_router(notes.router)
     application.include_router(chats.note_chats)

@@ -17,18 +17,31 @@ assistant about it.
 - Docker Desktop (Compose v2)
 - [uv](https://docs.astral.sh/uv/) 0.11.24. It installs the pinned Python itself.
 
-## First run
+## Running everything with Docker
 
 ```bash
-cp .env.example .env          # local values; never committed
-docker compose up -d db       # Postgres 17 on localhost:5432, data on a named volume
+cp .env.example .env          # then set JWT_SECRET; the comment says how to generate one
+docker compose up --build     # Postgres, then the backend on http://localhost:8000
+```
+
+The backend container runs the migrations and then serves. `/health` answers 200 once the
+database does, and the OpenAPI docs are at http://localhost:8000/docs. Data lives on a named volume
+and survives `docker compose down`; `docker compose down -v` wipes it. Logs are JSON on
+`docker compose logs -f backend`.
+
+If port 5432 or 8000 is taken, set `POSTGRES_PORT` or `BACKEND_PORT` in `.env`; for Postgres, use
+the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
+
+## Running the backend outside Docker
+
+For development with reload and the tests:
+
+```bash
+docker compose up -d db       # Postgres only
 cd backend && uv sync --locked
 ```
 
-If something else already uses port 5432, set `POSTGRES_PORT` in `.env` to a free port and use the
-same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
-
-## Running the backend locally
+### Serving with reload
 
 ```bash
 cd backend
