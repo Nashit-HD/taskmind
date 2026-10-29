@@ -69,6 +69,28 @@ curl -s -X DELETE localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN" -o /d
 
 `limit` is 1 to 100 (default 50). Changing someone else's note is a 403; a missing note is a 404.
 
+### Chats
+
+A chat belongs to one note and is private to the user who opened it. Posting a message stores it,
+asks the assistant, and stores the reply. Until PR 7 the assistant is an echo, so the flow can be
+tried without an API key.
+
+```bash
+curl -s -X POST localhost:8000/notes/1/chats -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Questions"}'
+curl -s localhost:8000/notes/1/chats -H "Authorization: Bearer $TOKEN"
+curl -s -X POST localhost:8000/chats/1/messages -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"content": "What is the plan?"}'
+curl -s localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN"
+curl -s -X PUT localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Plan questions"}'
+curl -s -X DELETE localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}\n'
+```
+
+A chat detail carries its most recent 200 messages, oldest first. Messages are at most 4000
+characters. Another user's chat is a 403; if the assistant fails the reply is a 502 and nothing
+is stored.
+
 ### Changing the schema
 
 Edit the models under `backend/app/models/`, then:

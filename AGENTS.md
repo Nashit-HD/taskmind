@@ -41,7 +41,9 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - `backend/app/main.py` — `create_app()`; the module-level `app` is served by `fastapi dev`/`fastapi run` via `[tool.fastapi]` in `pyproject.toml`
 - `backend/app/config.py` — `Settings` from env, then the repo-root `.env`; `SettingsDep` for handlers
 - `backend/app/logging.py` — JSON formatter, `X-Request-Id` middleware, one log line per request; pass fields as `extra={"fields": {...}}`
-- Planned per `docs/plans/2026-10-20-backend-design.md`: `database.py`, `security.py`, `auth.py`, `assistant.py`, `models/`, `schemas/`, `routers/`
+- `backend/app/assistant.py` — the `Assistant` protocol, `get_assistant` and `AssistantDep`; routers never call a provider directly, tests override the dependency, PR 7 swaps the `EchoAssistant` default for OpenAI
+- `backend/app/pagination.py` — `LimitQuery`/`OffsetQuery`, the bounds every list endpoint shares
+- Planned per `docs/plans/2026-10-20-backend-design.md`: `models/`, `schemas/`, `routers/` as built; a Dockerfile and `/health` in PR 6
 - Dependencies are `Annotated[..., Depends(...)]` aliases ending in `Dep`; handlers that touch the database are plain `def`
 - Error shape is FastAPI's `{"detail": ...}` everywhere
 - Observed through JSON logs on stdout (`docker compose logs backend` once the service exists): one `info` line per request with `status` and `duration_ms`; a failure is an `error` line with `exception` and the same `request_id` the client received
