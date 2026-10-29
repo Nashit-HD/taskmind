@@ -16,5 +16,27 @@ services:
       timeout: 3s
       retries: 10
 
+  backend:
+    build: ./backend
+    environment:
+      # Not the DATABASE_URL from .env: that one says localhost, for a developer's shell. Inside
+      # the Compose network Postgres is the service `db` on its own port 5432.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-taskmind}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set; copy .env.example to .env}@db:5432/${POSTGRES_DB:-taskmind}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set; see .env.example for how to generate one}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # The slim image has no curl; urlopen raises on any non-2xx, which fails the check.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   taskmind_pgdata:
