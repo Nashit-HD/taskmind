@@ -56,3 +56,7 @@ TEST_JWT_SECRET = "test-only-secret-never-used-anywhere-real-0123456789"
 
 os.environ["JWT_SECRET"] = TEST_JWT_SECRET
 os.environ.setdefault("JWT_EXPIRE_MINUTES", "60")
+
+# A developer's real key must never be called by a test: without one the echo answers, and the
+# unit tests that cover the OpenAI path patch the client.
+os.environ.pop("OPENAI_API_KEY", None)
