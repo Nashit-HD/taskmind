@@ -39,3 +39,15 @@ def test_jwt_expiry_defaults_to_sixty_minutes(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("JWT_EXPIRE_MINUTES", raising=False)
 
     assert Settings().jwt_expire_minutes == 60
+
+
+def test_an_empty_openai_key_means_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    assert Settings().openai_api_key is None
+
+
+def test_the_openai_key_does_not_appear_in_the_repr(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-very-secret")
+
+    assert "very-secret" not in repr(Settings())

@@ -25,11 +25,19 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     jwt_secret: SecretStr
     jwt_expire_minutes: int = 60
+    # Empty means unset: the echo assistant answers. Read once, when the client is built.
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-6-luna"
 
     @property
     def cors_origin_list(self) -> list[str]:
         """``CORS_ORIGINS`` as a list: comma-separated in the environment, blanks dropped."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @field_validator("openai_api_key", mode="before")
+    @classmethod
+    def _empty_key_is_none(cls, value: object) -> object:
+        return None if value == "" else value
 
     @field_validator("jwt_secret")
     @classmethod
