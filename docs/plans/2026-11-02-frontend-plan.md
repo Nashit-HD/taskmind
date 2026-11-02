@@ -3161,7 +3161,8 @@ jobs:
       - name: Install
         run: cd backend && uv sync --locked
       - name: Validate
-        run: cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
+        # The backend half of the Validate command in AGENTS.md, verbatim.
+        run: cd backend && uv run pytest tests/unit && uv run ruff check . && uv run ruff format --check . && uv run mypy
 
   integration:
     name: integration
@@ -3213,7 +3214,8 @@ jobs:
       - name: Install
         run: cd frontend && npm ci
       - name: Validate
-        run: cd frontend && npm run validate
+        # The frontend half of the Validate command in AGENTS.md, verbatim.
+        run: cd frontend && npm test && npm run lint && npm run format:check && npm run typecheck
       - name: Changed-line coverage
         # The same diff-cover the backend uses, over Vitest's Cobertura report.
         run: cd frontend && npm run test:coverage && uvx diff-cover coverage/cobertura-coverage.xml --compare-branch=origin/main --fail-under=20
@@ -3524,7 +3526,7 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - **Components:**
   - backend — `backend/`
   - frontend — `frontend/`
-- **Validate command:** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit && cd ../frontend && npm run validate`
+- **Validate command:** `cd backend && uv run pytest tests/unit && uv run ruff check . && uv run ruff format --check . && uv run mypy && cd ../frontend && npm test && npm run lint && npm run format:check && npm run typecheck`
 - **Lint / format command:** `cd backend && uv run ruff check --fix . && uv run ruff format . && cd ../frontend && npm run lint && npm run format`
 - **Type check command:** `cd backend && uv run mypy && cd ../frontend && npm run typecheck`
 - **Type check strictness:** `mypy --strict` (`strict = true` in `backend/pyproject.toml`); `tsc` with `strict` and `noUncheckedIndexedAccess` (`frontend/tsconfig.json`)
@@ -3548,12 +3550,12 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 ## Testing
 - **Framework:** pytest (backend), Vitest + Testing Library in jsdom (frontend)
 - **Single target:** `cd backend && uv run pytest tests/unit/test_app.py`; frontend: `cd frontend && npx vitest run lib/api.test.ts`
-- **Location / naming:** `backend/tests/{unit,integration}/test_*.py`, tests tree; `frontend/**/*.test.{ts,tsx}`, colocated
+- **Location / naming:** `backend/tests/{unit,integration}/test_*.py`, tests tree; `frontend/**/*.test.{ts,tsx}`, colocated. Suite commands run inside `backend/` or `frontend/`, as the Validate command does
 - **Coverage target:** 20% — warns (prototype)
 - **Suites:**
-    - unit — `cd backend && uv run pytest tests/unit` — gate
+    - unit — `uv run pytest tests/unit` — gate
     - integration — `cd backend && uv run pytest --cov=app --cov-report=xml && uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=20` — ci
-    - frontend-unit — `cd frontend && npm test` — gate
+    - frontend-unit — `npm test` — gate
     - frontend-coverage — `cd frontend && npm run test:coverage && uvx diff-cover coverage/cobertura-coverage.xml --compare-branch=origin/main --fail-under=20` — ci
 ## Architecture & Structure
 - `backend/app/main.py` — `create_app()`; the module-level `app` is served by `fastapi dev`/`fastapi run` via `[tool.fastapi]` in `pyproject.toml`
@@ -3592,8 +3594,8 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - ⚠️ **Port 5432 may be taken by another project's Postgres** — set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 - ⚠️ **`get_settings()` is cached** — a test that changes env must call `get_settings.cache_clear()` after.
 - ⚠️ **`build_assistant()` is cached like `get_settings()`** — a test that sets `OPENAI_API_KEY` must clear both caches; `tests/conftest.py` unsets the key so no test ever calls OpenAI.
-- ⚠️ **`NEXT_PUBLIC_API_URL` is inlined at build time** — change it in `.env` and rebuild (`docker compose up --build`); a running container cannot be re-pointed. If `FRONTEND_PORT` changes, `CORS_ORIGINS` must change with it or every API call fails in the browser.
-- ⚠️ **The React compiler lint rule refuses `setState` directly in an effect** — key loaded state to the id it was loaded for (see `RequireAuth.tsx`, `ChatsProvider.tsx`) instead of resetting it in the effect.
+- ⚠️ **`NEXT_PUBLIC_API_URL` is baked into the frontend image** — after changing it, `docker compose up --build`. A new `FRONTEND_PORT` needs a matching `CORS_ORIGINS`.
+- ⚠️ **Lint refuses `setState` directly in an effect** (React compiler rule) — key loaded state to its id instead of resetting it; see `RequireAuth.tsx`, `ChatsProvider.tsx`.
 - ⚠️ **No AI attribution in commits or PR descriptions** — remove any `Co-Authored-By: Claude` or "Generated with" line before committing.
 - ⚠️ **Read `GLOSSARY.md` and `docs/adr/` before changing the domain** — chats are private to their user (ADR 0003); use author, user, assistant, not owner, creator, bot.
 <!-- END hd-skills REQUIRED SECTION: everything below is team-maintained; tooling never edits it -->

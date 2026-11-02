@@ -7,7 +7,7 @@ assistant about it.
 ## Structure
 
 - `backend/` — FastAPI API, SQLAlchemy models, Alembic migrations, pytest tests
-- `frontend/` — Next.js app (not started)
+- `frontend/` — Next.js app, Vitest tests
 - `docs/plans/` — design specs and implementation plans
 - `docs/adr/` — decisions already taken; `GLOSSARY.md` — the domain language
 - `docker/` — files mounted into Compose services
@@ -16,21 +16,24 @@ assistant about it.
 
 - Docker Desktop (Compose v2)
 - [uv](https://docs.astral.sh/uv/) 0.11.24. It installs the pinned Python itself.
+- Node.js 24.22.2 (`frontend/.node-version`) with npm, only to run the frontend outside Docker.
 
 ## Running everything with Docker
 
 ```bash
 cp .env.example .env          # then set JWT_SECRET; the comment says how to generate one
-docker compose up --build     # Postgres, then the backend on http://localhost:8000
+docker compose up --build     # Postgres, the backend on :8000, then the frontend on :3000
 ```
 
-The backend container runs the migrations and then serves. `/health` answers 200 once the
-database does, and the OpenAPI docs are at http://localhost:8000/docs. Data lives on a named volume
-and survives `docker compose down`; `docker compose down -v` wipes it. Logs are JSON on
-`docker compose logs -f backend`.
+Open http://localhost:3000, register with an email and a password of 8 or more characters, and you
+are on the notes page. The backend container runs the migrations and then serves. `/health`
+answers 200 once the database does, and the OpenAPI docs are at http://localhost:8000/docs. Data
+lives on a named volume and survives `docker compose down`; `docker compose down -v` wipes it.
+Logs are JSON on `docker compose logs -f backend`.
 
-If port 5432 or 8000 is taken, set `POSTGRES_PORT` or `BACKEND_PORT` in `.env`; for Postgres, use
-the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
+If a port is taken, set `POSTGRES_PORT`, `BACKEND_PORT` or `FRONTEND_PORT` in `.env`. For Postgres,
+use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`; for the backend, set
+`NEXT_PUBLIC_API_URL` to match; for the frontend, set `CORS_ORIGINS` to match.
 
 ## Running the backend outside Docker
 
@@ -113,6 +116,34 @@ so everything else can be tried without a key; the log says so once at the first
 Each call has a 30-second timeout and at most two retries on transient errors. If it still fails,
 the message post is a 502 and nothing is stored, so re-send it.
 
+## Running the frontend outside Docker
+
+With the backend up (in Docker or with `fastapi dev`):
+
+```bash
+cd frontend
+npm ci
+npm run dev                    # http://localhost:3000, reloads on save
+```
+
+The app reads `NEXT_PUBLIC_API_URL` at build time; it defaults to http://localhost:8000. The pages:
+
+- `/sign-in` — register or sign in. The token is kept for the tab and dropped when it closes.
+- `/notes` — every user's notes, newest first; create a note, and edit or delete your own, with a
+  confirmation before a delete.
+- `/notes/{id}/chats` — your chats on that note in a sidebar: start one, rename it, delete it.
+- `/notes/{id}/chats/{chatId}` — the chat: its messages oldest first, and a box to ask the
+  assistant. The reply appears under your message without a reload.
+
+Every form refuses an empty title or message before anything is sent, and shows the API's own
+message when a request fails. A 401 from the API sends you back to sign in.
+
+Lint, format, type check and test:
+
+```bash
+cd frontend && npm run validate
+```
+
 ### Changing the schema
 
 Edit the models under `backend/app/models/`, then:
@@ -143,6 +174,16 @@ Lint, format and type check:
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
+Frontend tests, with coverage:
+
+```bash
+cd frontend && npm run test:coverage
+```
+
+They run in jsdom with `fetch` stubbed, so no test needs the API. CI runs `npm run validate` and
+`diff-cover` on the changed lines, and a `compose` job that builds all three services and checks
+both `/health` endpoints.
+
 ## Decisions
 
 See `docs/plans/2026-10-20-backend-design.md` and `docs/adr/`. In short:
@@ -154,7 +195,33 @@ See `docs/plans/2026-10-20-backend-design.md` and `docs/adr/`. In short:
 - Chats belong to a note and are private to the user who opened them; the assistant answers from
   that note's content only.
 - JSON logs with an `X-Request-Id` on every request and response.
+- The browser calls the API directly with the bearer token kept in `sessionStorage` (ADR 0004);
+  all calls go through `frontend/lib/api.ts`, which bounds every wait and turns errors into
+  messages. Chats live under their note in the UI, as in the API, so the assignment's `/chats`
+  page is `/notes/{id}/chats`.
 
 ## Unfinished and next steps
 
-_Written at the deadline._
+Written at the deadline, 2026-10-30, and after it: the frontend was finished on 2026-11-02. What
+is built: every backend endpoint with 146 tests, Docker for both apps, and a frontend that covers
+sign-in, notes, chats and messages with loading, error and validation states. What is not:
+
+- **The assistant has not been tried against OpenAI.** No key was available; the echo assistant
+  answered every test. First thing with a key: post a message and read the `openai call` log line.
+- **No frontend end-to-end test.** The forms and the API client have unit tests; nothing drives a
+  browser through sign-in to a chat. Next: Playwright against `docker compose up`, run in CI.
+- **No paging in the UI.** The API bounds every list; the notes page shows the newest 50 and the
+  sidebar the 50 most recent chats. Next: a "load more" on each, using `limit` and `offset`.
+- **No search by title**, the assignment's first bonus. The API would need a query parameter and
+  an index on `lower(title)`.
+- **Token in `sessionStorage`** (ADR 0004). Beyond a prototype, an httpOnly cookie with a Next.js
+  proxy route, and a refresh token so the hour-long session does not end mid-chat.
+- **A slow assistant holds a worker thread.** Each message waits up to 100 s in the API's
+  threadpool; 40 slow calls at once would stall every request. Next: an async handler with
+  `AsyncOpenAI`, or a queue.
+- **No tracing of the assistant call** beyond one log line with tokens and latency. HD's standard
+  is OpenInference spans in Arize Phoenix.
+- **No login rate limit** and no account lockout.
+- **Required status checks on `main`** are not configured on the repository yet.
+- **No dependency-update bot** for either manifest; updates are by hand until Dependabot or Renovate
+  is switched on.
