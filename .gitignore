@@ -21,6 +21,8 @@ node_modules/
 out/
 *.tsbuildinfo
 npm-debug.log*
+next-env.d.ts
+coverage/
 
 # Databases and dumps
 *.sqlite

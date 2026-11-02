@@ -1,3 +1,3 @@
 # TaskMind frontend
 
-Next.js app. Work starts in week 2.
+Next.js app. Setup, commands and decisions are in the repository README.
