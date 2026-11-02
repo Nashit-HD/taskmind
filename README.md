@@ -52,6 +52,23 @@ curl -s localhost:8000/auth/me -H "Authorization: Bearer <access_token>"
 
 Tokens last `JWT_EXPIRE_MINUTES` (default 60). On `/docs`, the Authorize button takes the token.
 
+### Notes
+
+Every signed-in user sees every note; only the author can change or delete one.
+
+```bash
+TOKEN=<access_token>
+curl -s -X POST localhost:8000/notes -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Plan", "content": "Ship the notes API"}'
+curl -s 'localhost:8000/notes?limit=10&offset=0' -H "Authorization: Bearer $TOKEN"
+curl -s localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN"
+curl -s -X PUT localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Plan", "content": "Shipped"}'
+curl -s -X DELETE localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}\n'
+```
+
+`limit` is 1 to 100 (default 50). Changing someone else's note is a 403; a missing note is a 404.
+
 ### Changing the schema
 
 Edit the models under `backend/app/models/`, then:

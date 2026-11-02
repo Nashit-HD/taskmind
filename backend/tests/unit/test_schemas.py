@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from app.schemas.note import CONTENT_MAX_LENGTH, TITLE_MAX_LENGTH, NoteCreate, NoteUpdate
 from app.schemas.user import Token, UserLogin, UserRegister
 
 
@@ -34,3 +35,40 @@ def test_login_rejects_an_empty_password() -> None:
 
 def test_token_type_is_bearer() -> None:
     assert Token(access_token="abc").model_dump() == {"access_token": "abc", "token_type": "bearer"}
+
+
+def test_note_create_strips_the_title_and_defaults_the_content() -> None:
+    body = NoteCreate(title="  Plan  ")
+
+    assert body.title == "Plan"
+    assert body.content == ""
+
+
+@pytest.mark.parametrize("title", ["", "   ", "\n\t", "x" * (TITLE_MAX_LENGTH + 1)])
+def test_note_create_rejects_an_empty_or_over_long_title(title: str) -> None:
+    with pytest.raises(ValidationError):
+        NoteCreate(title=title)
+
+
+def test_note_create_accepts_a_title_at_the_maximum_length_after_stripping() -> None:
+    body = NoteCreate(title=" " + "x" * TITLE_MAX_LENGTH + " ")
+
+    assert len(body.title) == TITLE_MAX_LENGTH
+
+
+def test_note_create_rejects_over_long_content() -> None:
+    with pytest.raises(ValidationError):
+        NoteCreate(title="Plan", content="x" * (CONTENT_MAX_LENGTH + 1))
+
+
+def test_note_update_requires_both_fields() -> None:
+    with pytest.raises(ValidationError):
+        NoteUpdate.model_validate({"title": "Plan"})
+    with pytest.raises(ValidationError):
+        NoteUpdate.model_validate({"content": "text"})
+
+
+def test_note_update_strips_the_title() -> None:
+    body = NoteUpdate(title=" Plan ", content="text")
+
+    assert body.title == "Plan"
