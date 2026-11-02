@@ -41,11 +41,15 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 - `backend/app/main.py` — `create_app()`; the module-level `app` is served by `fastapi dev`/`fastapi run` via `[tool.fastapi]` in `pyproject.toml`
 - `backend/app/config.py` — `Settings` from env, then the repo-root `.env`; `SettingsDep` for handlers
 - `backend/app/logging.py` — JSON formatter, `X-Request-Id` middleware, one log line per request; pass fields as `extra={"fields": {...}}`
-- Planned per `docs/plans/2026-10-20-backend-design.md`: `database.py`, `security.py`, `auth.py`, `assistant.py`, `models/`, `schemas/`, `routers/`
+- `backend/app/assistant.py` — the `Assistant` protocol, `get_assistant` and `AssistantDep`; routers never call a provider directly. `build_assistant()` picks `OpenAIAssistant` when `OPENAI_API_KEY` is set, else `EchoAssistant`, once per process (cached); tests override the dependency or clear the cache
+- `backend/app/pagination.py` — `LimitQuery`/`OffsetQuery`, the bounds every list endpoint shares
+- `backend/app/routers/health.py` — `GET /health`, unauthenticated, 200 only when `SELECT 1` answers; the Compose healthcheck calls it
+- `backend/Dockerfile` + `backend/entrypoint.sh` — pinned `python:3.13-slim`, deps from `uv.lock` with `--no-dev`, non-root; the entrypoint runs `alembic upgrade head` then `fastapi run`
 - Dependencies are `Annotated[..., Depends(...)]` aliases ending in `Dep`; handlers that touch the database are plain `def`
 - Error shape is FastAPI's `{"detail": ...}` everywhere
-- Observed through JSON logs on stdout (`docker compose logs backend` once the service exists): one `info` line per request with `status` and `duration_ms`; a failure is an `error` line with `exception` and the same `request_id` the client received
+- Observed through JSON logs on stdout (`docker compose logs backend`): one `info` line per request with `status` and `duration_ms`; a failure is an `error` line with `exception` and the same `request_id` the client received
 ## Key Commands
+- Run everything: `docker compose up --build` (backend on :8000; needs a root `.env` with `POSTGRES_PASSWORD` and `JWT_SECRET`)
 - Install: `cd backend && uv sync --locked`
 - Run API locally: `cd backend && uv run fastapi dev` (needs `db` up and a root `.env`)
 - Database: `docker compose up -d db`; reset it: `docker compose down -v`
@@ -59,9 +63,10 @@ TaskMind: shared notes with note-scoped AI chats. FastAPI + SQLAlchemy 2.0 + Pos
 ## Quirks & Gotchas
 - ⚠️ **The test database is `<POSTGRES_DB>_test`, created by `docker/postgres/init/` only on a fresh volume** — if it is missing, `docker compose down -v` then `up -d db`.
 - ⚠️ **Integration tests read only `TEST_DATABASE_URL` and refuse a database whose name does not end in `_test`** — set it in `.env` or the environment; unit tests need no database; the test process overrides `DATABASE_URL`.
-- ⚠️ **Compose refuses to start without `POSTGRES_PASSWORD`** — `cp .env.example .env` first; `.env` is gitignored.
+- ⚠️ **Compose refuses to start without `POSTGRES_PASSWORD` and `JWT_SECRET`, even for `db` alone** — `cp .env.example .env` and set a real `JWT_SECRET`; `.env` is gitignored.
 - ⚠️ **Port 5432 may be taken by another project's Postgres** — set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 - ⚠️ **`get_settings()` is cached** — a test that changes env must call `get_settings.cache_clear()` after.
+- ⚠️ **`build_assistant()` is cached like `get_settings()`** — a test that sets `OPENAI_API_KEY` must clear both caches; `tests/conftest.py` unsets the key so no test ever calls OpenAI.
 - ⚠️ **No AI attribution in commits or PR descriptions** — remove any `Co-Authored-By: Claude` or "Generated with" line before committing.
 - ⚠️ **Read `GLOSSARY.md` and `docs/adr/` before changing the domain** — chats are private to their user (ADR 0003); use author, user, assistant, not owner, creator, bot.
 <!-- END hd-skills REQUIRED SECTION: everything below is team-maintained; tooling never edits it -->

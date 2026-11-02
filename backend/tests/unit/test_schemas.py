@@ -1,6 +1,10 @@
 import pytest
 from pydantic import ValidationError
 
+from app.schemas.chat import TITLE_MAX_LENGTH as CHAT_TITLE_MAX_LENGTH
+from app.schemas.chat import ChatCreate, ChatUpdate
+from app.schemas.message import CONTENT_MAX_LENGTH as MESSAGE_MAX_LENGTH
+from app.schemas.message import MessageCreate
 from app.schemas.note import CONTENT_MAX_LENGTH, TITLE_MAX_LENGTH, NoteCreate, NoteUpdate
 from app.schemas.user import Token, UserLogin, UserRegister
 
@@ -72,3 +76,28 @@ def test_note_update_strips_the_title() -> None:
     body = NoteUpdate(title=" Plan ", content="text")
 
     assert body.title == "Plan"
+
+
+def test_chat_create_strips_the_title() -> None:
+    assert ChatCreate(title="  Questions ").title == "Questions"
+
+
+@pytest.mark.parametrize("title", ["", "  ", "x" * (CHAT_TITLE_MAX_LENGTH + 1)])
+def test_chat_create_rejects_an_empty_or_over_long_title(title: str) -> None:
+    with pytest.raises(ValidationError):
+        ChatCreate(title=title)
+
+
+def test_chat_update_requires_a_title() -> None:
+    with pytest.raises(ValidationError):
+        ChatUpdate.model_validate({})
+
+
+def test_message_create_strips_the_content() -> None:
+    assert MessageCreate(content=" hi ").content == "hi"
+
+
+@pytest.mark.parametrize("content", ["", "\n", "x" * (MESSAGE_MAX_LENGTH + 1)])
+def test_message_create_rejects_empty_or_over_long_content(content: str) -> None:
+    with pytest.raises(ValidationError):
+        MessageCreate(content=content)

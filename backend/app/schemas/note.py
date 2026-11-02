@@ -9,16 +9,13 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.text import strip_text
+
 TITLE_MAX_LENGTH = 200
 # Not in the spec, which caps only message content. The whole note goes to the assistant on every
 # message, so its size needs a ceiling. Generous for a note; far below anything the database or
 # the model would choke on.
 CONTENT_MAX_LENGTH = 20_000
-
-
-def _strip(value: object) -> object:
-    """Trim a string before validation; leave anything else for Pydantic to reject."""
-    return value.strip() if isinstance(value, str) else value
 
 
 class NoteCreate(BaseModel):
@@ -28,7 +25,7 @@ class NoteCreate(BaseModel):
     @field_validator("title", mode="before")
     @classmethod
     def _strip_title(cls, value: object) -> object:
-        return _strip(value)
+        return strip_text(value)
 
 
 class NoteUpdate(BaseModel):
@@ -38,7 +35,7 @@ class NoteUpdate(BaseModel):
     @field_validator("title", mode="before")
     @classmethod
     def _strip_title(cls, value: object) -> object:
-        return _strip(value)
+        return strip_text(value)
 
 
 class NoteRead(BaseModel):

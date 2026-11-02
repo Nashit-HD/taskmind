@@ -17,18 +17,31 @@ assistant about it.
 - Docker Desktop (Compose v2)
 - [uv](https://docs.astral.sh/uv/) 0.11.24. It installs the pinned Python itself.
 
-## First run
+## Running everything with Docker
 
 ```bash
-cp .env.example .env          # local values; never committed
-docker compose up -d db       # Postgres 17 on localhost:5432, data on a named volume
+cp .env.example .env          # then set JWT_SECRET; the comment says how to generate one
+docker compose up --build     # Postgres, then the backend on http://localhost:8000
+```
+
+The backend container runs the migrations and then serves. `/health` answers 200 once the
+database does, and the OpenAPI docs are at http://localhost:8000/docs. Data lives on a named volume
+and survives `docker compose down`; `docker compose down -v` wipes it. Logs are JSON on
+`docker compose logs -f backend`.
+
+If port 5432 or 8000 is taken, set `POSTGRES_PORT` or `BACKEND_PORT` in `.env`; for Postgres, use
+the same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
+
+## Running the backend outside Docker
+
+For development with reload and the tests:
+
+```bash
+docker compose up -d db       # Postgres only
 cd backend && uv sync --locked
 ```
 
-If something else already uses port 5432, set `POSTGRES_PORT` in `.env` to a free port and use the
-same port in `DATABASE_URL` and `TEST_DATABASE_URL`.
-
-## Running the backend locally
+### Serving with reload
 
 ```bash
 cd backend
@@ -68,6 +81,37 @@ curl -s -X DELETE localhost:8000/notes/1 -H "Authorization: Bearer $TOKEN" -o /d
 ```
 
 `limit` is 1 to 100 (default 50). Changing someone else's note is a 403; a missing note is a 404.
+
+### Chats
+
+A chat belongs to one note and is private to the user who opened it. Posting a message stores it,
+asks the assistant, and stores the reply. Without an `OPENAI_API_KEY` the assistant is an echo, so the
+flow can be tried without a key.
+
+```bash
+curl -s -X POST localhost:8000/notes/1/chats -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Questions"}'
+curl -s localhost:8000/notes/1/chats -H "Authorization: Bearer $TOKEN"
+curl -s -X POST localhost:8000/chats/1/messages -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"content": "What is the plan?"}'
+curl -s localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN"
+curl -s -X PUT localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"title": "Plan questions"}'
+curl -s -X DELETE localhost:8000/chats/1 -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}\n'
+```
+
+A chat detail carries its most recent 200 messages, oldest first. Messages are at most 4000
+characters. Another user's chat is a 403; if the assistant fails the reply is a 502 and nothing
+is stored.
+
+### The assistant
+
+Set `OPENAI_API_KEY` in `.env` and the assistant answers through OpenAI, using only the note the
+chat belongs to; `OPENAI_MODEL` picks the model. Leave the key empty and an echo answers instead,
+so everything else can be tried without a key; the log says so once at the first message.
+
+Each call has a 30-second timeout and at most two retries on transient errors. If it still fails,
+the message post is a 502 and nothing is stored, so re-send it.
 
 ### Changing the schema
 
