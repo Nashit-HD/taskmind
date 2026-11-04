@@ -25,7 +25,8 @@ jobs:
       - name: Install
         run: cd backend && uv sync --locked
       - name: Validate
-        run: cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
+        # The backend half of the Validate command in AGENTS.md, verbatim.
+        run: cd backend && uv run pytest tests/unit && uv run ruff check . && uv run ruff format --check . && uv run mypy
 
   integration:
     name: integration
@@ -59,6 +60,30 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:${{ env.POSTGRES_PORT }}/${{ env.POSTGRES_DB }}_test
         run: cd backend && uv run pytest --cov=app --cov-report=xml && uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=20
 
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install
+        run: cd frontend && npm ci
+      - name: Validate
+        # The frontend half of the Validate command in AGENTS.md, verbatim.
+        run: cd frontend && npm test && npm run lint && npm run format:check && npm run typecheck
+      - name: Changed-line coverage
+        # The same diff-cover the backend uses, over Vitest's Cobertura report.
+        run: cd frontend && npm run test:coverage && uvx diff-cover coverage/cobertura-coverage.xml --compare-branch=origin/main --fail-under=20
+
   compose:
     name: compose
     runs-on: ubuntu-24.04
@@ -75,10 +100,12 @@ jobs:
         # assignment's "docker compose up --build must start both apps" as a check.
         run: docker compose up --build -d --wait
       - name: Health
-        run: curl --fail --silent --show-error http://localhost:8000/health
-      - name: Backend logs
+        run: |
+          curl --fail --silent --show-error http://localhost:8000/health
+          curl --fail --silent --show-error http://localhost:3000/health
+      - name: Service logs
         if: always()
-        run: docker compose logs backend
+        run: docker compose logs backend frontend
       - name: Stop
         if: always()
         run: docker compose down -v
